@@ -2,9 +2,11 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 
 def get_k_most_sensitivie(map, p):
-    top_k_indices = torch.topk(map, int(len(map) * p), largest=True).indices
-    Mask = torch.zeros(map.shape) == 0
-    Mask[top_k_indices] = False
+    map_list = map.view(-1).tolist()
+    top_k_indices = torch.topk(map_list, int(len(map_list) * p), largest=True).indices
+    Mask = torch.zeros(map_list.shape)
+    Mask[top_k_indices] = 1
+    Mask = torch.tensor(Mask).view(map.shape)
     return Mask
 
 def calculate_mask(args, global_model, dataset_test):
@@ -18,8 +20,8 @@ def calculate_mask(args, global_model, dataset_test):
 
     loss = loss_function(y_preds, labels)
     loss.backward()
-    gradients = [param.grad.data.view(-1) for param in global_model.parameters()]
-    dloss_dw = [grad.tolist() for grad in gradients] #flat gradients(tensors) to a vector
+    gradients = [param.grad.data for param in global_model.parameters()]
+    #dloss_dw = [grad.tolist() for grad in gradients] #flat gradients(tensors) to a vector
     encryption_mask = []
 
     for grad in gradients:

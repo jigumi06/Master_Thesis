@@ -232,10 +232,10 @@ def run_FedFA():
     server_feature = copy.deepcopy(serverz)
     # Preparation of selective HE
     encryption_mask = selective_he.calculate_mask(args, server_feature.nn, testset)
-    '''
+
     if Train_model:
         print("Start server")
-        global_modelfa, similarity_dictfa, client_modelsfa, loss_dictfa, clients_indexfa, acc_listfa = server_feature.fedfa_anchorloss(testset, dict_users_test_iid[0], similarity = similarity, test_global_model_accuracy = True)
+        global_modelfa, similarity_dictfa, client_modelsfa, loss_dictfa, clients_indexfa, acc_listfa = server_feature.fedfa_anchorloss(testset, dict_users_test_iid[0], encryption_mask, similarity = similarity, test_global_model_accuracy = True)
         print("End Server")
     else:
         if similarity:
@@ -261,7 +261,7 @@ def run_FedFA():
         print("Start drawing")
         train_loss_show(args, loss_dictfa, clients_indexfa)
         train_globalacc_show(args, acc_listfa)
-   ''' 
+
 if __name__ == "__main__":
     # run_FedDyn()
     run_FedFA()
