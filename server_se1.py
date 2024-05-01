@@ -42,6 +42,17 @@ class Server:
         self.args = args
         self.nn = copy.deepcopy(model)
         self.nns = [[] for i in range(self.args.K)]
+        self.shape_list= []
+        for layer in model.parameters():
+            self.shape_list.append(layer.shape)
+
+        self.global_layer_list = []
+        for layer in model.parameters():
+            self.global_layer_list.append(layer)
+
+        self.global_model_state = model.state_dict()
+        
+        self.layer_list = [[] for i in range(self.args.K)]
         self.p_nns = []
         self.cls = []
         self.cocols = []
@@ -472,12 +483,16 @@ class Server:
             acc_list = []
         for t in range(self.args.r):
             print('round', t + 1, ':')
+            # Modification for alternative SHE
+            protected = True if t%2 == 0 else False
             # sampling
             np.random.seed(self.args.seed+t)
             m = np.max([int(self.args.C * self.args.K), 1])#C is client sample rate
+            max_index = int(self.args.K/2-1)
             index = np.random.choice(range(0, self.args.K), m, replace=False)  # sample m clients
+            print("active clients: ", index)
             self.index_dict[t]= index
-
+            
             # dispatch
             if fedbn:
                 for i in index:
@@ -488,16 +503,26 @@ class Server:
                             client_w[key] = global_w[key] 
                     self.nns[i].load_state_dict(client_w)
             else:
-                dispatch(index, self.nn, self.nns)
+                # Modification for alternative SHE
+                if protected:
+                    # safe_dispatch(index, self.nn, self.nns)
+                    safe_dispatch(index, self.global_layer_list, self.layer_list)
+                else:
+                    dispatch(index, self.nn, self.nns)
             dispatch(index, self.anchorloss, self.cls)
-
-            # Encrypt global model
-            #self.nn = ckks.EncryptionManager().encrypt(self.nn)
-
-
-            #joint updating to obtain personalzied model based on updating global model
-            self.cls, self.nns, self.loss_dict  = client_fedfa_cl(self.args, index, self.cls, self.nns, self.nn, t, self.dataset,  self.dict_users, self.loss_dict, mask)
             
+            '''
+            # Modification for alternative SHE
+            if protected:
+                #joint updating to obtain personalzied model based on updating global model
+                self.cls, self.nns, self.loss_dict, self.layer_list = client_fedfa_cl_secured(self.args, index, self.cls, self.nn, t, self.dataset,  self.dict_users, self.loss_dict, mask, self.layer_list, self.global_layer_list, self.shape_list)
+                # print(self.layer_list)
+            else:
+                self.cls, self.nns, self.loss_dict  = client_fedfa_cl(self.args,index, self.cls, self.nns, self.nn, t, self.dataset,  self.dict_users, self.loss_dict)
+            '''
+            
+            self.cls, self.nns, self.loss_dict, self.layer_list = client_fedfa_cl_secured(self.args, index, self.cls, self.nns, self.nn, t, self.dataset,  self.dict_users, self.loss_dict, mask, self.layer_list, self.global_layer_list, self.shape_list, protected)
+
             
             # compute feature similarity
             if similarity:
@@ -528,7 +553,12 @@ class Server:
             if fedbn:
                 aggregation(index, self.nn, self.nns, self.dict_users,fedbn=True)
             else:
-                aggregation(index, self.nn, self.nns, self.dict_users)
+                # Modification for alternative SHE
+                if protected:
+                    # aggregation(index, self.nn, self.nns, self.dict_users, fedbn=False)
+                    self.global_model_state = safe_aggregation(index, self.dict_users, self.global_model_state, self.layer_list)
+                else:
+                    aggregation(index, self.nn, self.nns, self.dict_users)
             aggregation(index, self.anchorloss, self.cls, self.dict_users)
 
             if test_global_model_accuracy:
@@ -540,9 +570,11 @@ class Server:
                         print(acc)
             
                 else:
-                    acc,_ = test_on_globaldataset(self.args, self.nn, testset)
-                    acc_list.append(acc)
-                    print(acc)
+                    # Modification for alternative SHE
+                    if protected:
+                        acc,_ = test_on_globaldataset(self.args, self.nn, testset)
+                        acc_list.append(acc)
+                        print(acc)
 
             
         if fedbn:
@@ -556,6 +588,7 @@ class Server:
             if self.nns[k]!=[]:
                 torch.save(self.nns[k].state_dict(), path)
         self.nns = [[] for i in range(self.args.K)]
+        self.layer_list = [[] for i in range(self.args.K)]
         torch.cuda.empty_cache()
         return self.nn, similarity_dict, self.nns, self.loss_dict, self.index_dict, mean_CKA_dict
 

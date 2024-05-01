@@ -76,8 +76,9 @@ plt.rcParams['figure.facecolor'] = 'white'
 
 
 # perform partition
+# Modification for alternative SHE
 noniid_labeldir_part = CIFAR10Partitioner(trainset.targets, 
-                                num_clients=num_clients,
+                                num_clients=(num_clients+1),
                                 balance=None, 
                                 partition="shards",
                                 num_shards=200,
@@ -102,8 +103,6 @@ noniid_labeldir_part_df[col_names].iloc[:10].plot.barh(stacked=True)
 #             dpi=400, bbox_inches = 'tight')
 
 # split dataset into training and testing
-
-
 
 trainset_sample_rate = args.trainset_sample_rate
 rare_class_nums = 0
@@ -149,7 +148,7 @@ for i in range(args.K):
     
 df_test_number['Col_sum'] = df_test_number.apply(lambda x: x.sum(), axis=1)
 df_test_number.loc['Row_sum'] = df_test_number.apply(lambda x: x.sum())
-
+'''
 # perform partition
 iid_part = FMNISTPartitioner(trainset.targets, 
                             num_clients=num_clients,
@@ -193,7 +192,7 @@ for i in range(args.K):
     
 df_training_number['Col_sum'] = df_training_number.apply(lambda x: x.sum(), axis=1)
 df_training_number.loc['Row_sum'] = df_training_number.apply(lambda x: x.sum())
-
+'''
 
 # initiate the server with defined model and dataset
 serverz = server.Server(args, specf_model, trainset, dict_users_train)#dict_users指的是user的local dataset索引
@@ -203,7 +202,7 @@ def run_FedDyn():
     # FedDyn
     server_feddyn = copy.deepcopy(serverz)
     if Train_model:
-        global_modeldyn, similarity_dictdyn, client_modelsdyn, loss_dictdyn, clients_indexdyn, acc_listdyn = server_feddyn.feddyn(testset, dict_users_test_iid[0],similarity = similarity, test_global_model_accuracy = True)
+        global_modeldyn, similarity_dictdyn, client_modelsdyn, loss_dictdyn, clients_indexdyn, acc_listdyn = server_feddyn.feddyn(testset, dict_users_test,similarity = similarity, test_global_model_accuracy = True)
     else:
         if similarity:
             similarity_dictdyn = torch.load("results/Test/label skew/cifar10/feddyn/seed{}/similarity_dictdyn_{}E_{}class.pt".format(args.seed,args.E,C))
@@ -231,11 +230,13 @@ def run_FedFA():
     print("Enter FedFA!")
     server_feature = copy.deepcopy(serverz)
     # Preparation of selective HE
-    encryption_mask = selective_he.calculate_mask(args, server_feature.nn, testset)
+    #encryption_mask = selective_he.calculate_mask(args, server_feature.nn, testset)
+    init_model = copy.deepcopy(serverz)
+    encryption_mask = selective_he.calculate_mask(args, init_model, trainset)
 
     if Train_model:
         print("Start server")
-        global_modelfa, similarity_dictfa, client_modelsfa, loss_dictfa, clients_indexfa, acc_listfa = server_feature.fedfa_anchorloss(testset, dict_users_test_iid[0], encryption_mask, similarity = similarity, test_global_model_accuracy = True)
+        global_modelfa, similarity_dictfa, client_modelsfa, loss_dictfa, clients_indexfa, acc_listfa = server_feature.fedfa_anchorloss(testset, dict_users_test, encryption_mask, similarity = similarity, test_global_model_accuracy = True)
         print("End Server")
     else:
         if similarity:
